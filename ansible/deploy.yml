@@ -1,0 +1,48 @@
+---
+- name: Deploy CampusCare MERN application
+  hosts: campuscare
+  become: true
+  vars:
+    app_remote_dir: /opt/campuscare
+  tasks:
+    - name: Install Docker Engine and Compose plugin
+      apt:
+        update_cache: true
+        name: [docker.io, docker-compose-v2]
+        state: present
+    - name: Enable Docker
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+    - name: Create application directory
+      file:
+        path: "{{ app_remote_dir }}"
+        state: directory
+        mode: "0755"
+    - name: Check that the production environment file exists
+      stat:
+        path: "{{ playbook_dir }}/../.env"
+      delegate_to: localhost
+      become: false
+      register: environment_file
+    - name: Require a production environment file
+      assert:
+        that: environment_file.stat.exists
+        fail_msg: "Create .env from .env.example and set a secure JWT_SECRET before deploying."
+    - name: Copy deployment source
+      copy:
+        src: "../"
+        dest: "{{ app_remote_dir }}/"
+    - name: Start the application stack
+      command: docker compose -f compose.yml up -d --build
+      args:
+        chdir: "{{ app_remote_dir }}"
+    - name: Verify API health
+      uri:
+        url: http://localhost/api/health
+        status_code: 200
+      register: health
+      retries: 12
+      delay: 5
+      until: health.status == 200

@@ -1,0 +1,16 @@
+node_modules/
+**/node_modules/
+client/dist/
+.env
+.env.*
+!.env.example
+*.pem
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+.DS_Store
+Thumbs.db
+*.log
+ansible/*.retry
