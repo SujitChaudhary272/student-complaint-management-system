@@ -1,4 +1,9 @@
-import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(here, "../../.env") });
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/campuscare";
 if (!/^mongodb(\+srv)?:\/\//i.test(mongoUri)) {
@@ -18,6 +23,6 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || "development-only-secret-change-me",
   adminUsername: "pccoe",
   adminPassword: "123456789",
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  clientUrl: process.env.CLIENT_URL || null,
   isProduction: process.env.NODE_ENV === "production"
 };

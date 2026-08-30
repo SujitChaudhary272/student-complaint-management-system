@@ -13,7 +13,9 @@ import { ensureAdminAccount, seedDemoData } from "./seed.js";
 
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: config.isProduction ? config.clientUrl : true }));
+// The production frontend and API share one origin. CORS is only enabled when
+// a separate client URL is explicitly configured.
+app.use(cors({ origin: config.isProduction ? config.clientUrl || false : true }));
 app.use(express.json({ limit: "100kb" }));
 app.use(morgan(config.isProduction ? "combined" : "dev"));
 app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }), authRoutes);

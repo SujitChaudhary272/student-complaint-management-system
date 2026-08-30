@@ -6,7 +6,7 @@ services:
       PORT: 5000
       MONGODB_URI: ${DOCKER_MONGODB_URI:-mongodb://mongo:27017/campuscare}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+      CLIENT_URL: ${CLIENT_URL:-}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
     ports:
       - "${APP_PORT:-80}:5000"
@@ -20,6 +20,8 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
+    networks:
+      - campuscare_internal
   mongo:
     image: mongo:8
     volumes:
@@ -30,5 +32,10 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - campuscare_internal
 volumes:
   mongo_data:
+networks:
+  campuscare_internal:
+    driver: bridge

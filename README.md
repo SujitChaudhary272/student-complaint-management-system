@@ -1,106 +1,104 @@
 # CampusCare — Student Complaint Management System
 
-CampusCare is a MERN application for submitting, tracking, and resolving student complaints. Students can create and monitor complaints; administrators can manage their status.
+CampusCare is a MERN application for students to submit and track complaints and for administrators to manage their status. In production, Express serves the built Vite frontend and exposes API routes under `/api`, including `/api/health`.
 
 ## Project structure
 
 ```text
 Student Complaint Management System/
-├── .dockerignore                         # Files excluded from Docker build context
-├── .env                                  # Local environment values (not committed)
-├── .env.example                          # Environment-variable template
-├── .gitignore                            # Git ignore rules
-├── compose.yml                           # Application and MongoDB Docker services
-├── Dockerfile                            # Production application image
-├── package.json                          # Root scripts and development dependencies
-├── package-lock.json                     # Root dependency lockfile
-├── README.md                             # Project documentation
-├── DEPLOY_AWS.md                         # Detailed AWS deployment guide
 ├── ansible/
-│   ├── deploy.yml                        # Playbook to deploy the Docker stack to EC2
-│   └── inventory.ini                     # EC2 host and SSH connection settings
-├── client/                               # React + Vite frontend
-│   ├── index.html                        # Vite HTML entry point
-│   ├── package.json                      # Frontend dependencies and scripts
-│   ├── package-lock.json                 # Frontend dependency lockfile
-│   ├── vite.config.js                    # Vite development/build configuration
+│   ├── Dockerfile                 # Ansible deployment image
+│   ├── deploy.yml                 # Configure the EC2 host and deploy Compose
+│   └── inventory.ini              # EC2 connection details
+├── client/
 │   ├── public/
-│   │   └── pccoe-logo.svg                # Public PCCOE logo asset
+│   │   └── pccoe-logo.svg         # College logo asset
 │   ├── src/
-│   │   ├── main.jsx                      # React application entry point
-│   │   ├── style.css                     # Global application styles
-│   │   └── pages/
-│   │       ├── AuthPage.jsx              # Student and administrator sign-in screens
-│   │       ├── DashboardPage.jsx         # Complaint dashboard and management screens
-│   │       └── LandingPage.jsx           # Public landing page
-│   └── dist/                             # Generated production frontend build
-│       ├── index.html
-│       ├── pccoe-logo.svg
-│       └── assets/
-│           ├── index-BQyUkSWC.css
-│           └── index-DbIPAB1j.js
-├── server/                               # Express + MongoDB backend
-│   ├── package.json                      # API dependencies and scripts
-│   ├── package-lock.json                 # API dependency lockfile
-│   └── src/
-│       ├── config.js                     # Environment and application configuration
-│       ├── server.js                     # Express server and API entry point
-│       ├── seed.js                       # Demo users and complaints seed script
-│       ├── middleware/
-│       │   └── auth.js                   # JWT authentication and role checks
-│       ├── models/
-│       │   ├── Complaint.js              # Complaint MongoDB model
-│       │   └── User.js                   # User MongoDB model
-│       └── routes/
-│           ├── auth.js                   # Authentication API routes
-│           └── complaints.js             # Complaint API routes
-└── terraform/                            # AWS infrastructure-as-code
-    ├── main.tf                           # EC2 and related AWS resources
-    ├── outputs.tf                        # Terraform deployment outputs
-    ├── variables.tf                      # Terraform input variables
-    └── versions.tf                       # Terraform/provider version requirements
+│   │   ├── pages/
+│   │   │   ├── AuthPage.jsx       # Login and registration
+│   │   │   ├── DashboardPage.jsx  # Overview, complaints, and submission form
+│   │   │   └── LandingPage.jsx    # Public landing page
+│   │   ├── main.jsx               # React entry point and API loading
+│   │   └── style.css              # Application styles
+│   ├── index.html                 # Vite HTML entry point
+│   ├── package-lock.json          # Locked frontend dependency versions
+│   ├── package.json               # Frontend dependencies and scripts
+│   └── vite.config.js             # Vite development configuration
+├── server/
+│   ├── src/
+│   │   ├── middleware/
+│   │   │   └── auth.js            # JWT authentication and authorization
+│   │   ├── models/
+│   │   │   ├── Complaint.js       # Complaint schema and reference numbering
+│   │   │   ├── Counter.js         # Complaint number counter schema
+│   │   │   └── User.js            # User schema and password hashing
+│   │   ├── routes/
+│   │   │   ├── auth.js            # Login, registration, and current-user API
+│   │   │   └── complaints.js      # Complaint and statistics API
+│   │   ├── config.js              # Environment configuration
+│   │   ├── seed.js                # Admin and optional demo data setup
+│   │   └── server.js              # Express server and MongoDB startup
+│   ├── package-lock.json          # Locked backend dependency versions
+│   └── package.json               # Backend dependencies and scripts
+├── terraform/
+│   ├── main.tf                    # AWS security group, EC2, and Elastic IP
+│   ├── outputs.tf                 # Deployment output values
+│   ├── variables.tf               # AWS and infrastructure variables
+│   └── versions.tf                # Terraform and provider versions
+├── .dockerignore                  # Docker build exclusions
+├── .env.example                   # Environment variable template
+├── .gitignore                     # Git exclusions for secrets and generated files
+├── compose.yml                    # Production-style app and MongoDB services
+├── DEPLOY_AWS.md                  # AWS, Terraform, and Ansible instructions
+├── Dockerfile                     # Production application image
+├── package-lock.json              # Locked root dependency versions
+├── package.json                   # Root scripts for the complete project
+└── README.md                      # Project documentation
 ```
 
-`node_modules/` directories are intentionally excluded because they are generated by `npm install`. The contents of `client/dist/` are generated by `npm run build`; their hashed filenames can change with each build.
+`package-lock.json` files are included at the root, in `client/`, and in `server/` to lock dependency versions. Generated directories and sensitive deployment files such as `node_modules/`, `client/dist/`, `.env`, PEM keys, and Terraform state are intentionally excluded from the documented source tree.
 
 ## Requirements
 
-- Node.js 22+ for development without Docker
-- MongoDB 8+ for development without Docker
-- Docker Desktop for the recommended local setup
-- Terraform 1.5+, AWS CLI, an AWS account, and Ansible (or WSL) only for AWS deployment
+- Node.js 22+
+- MongoDB 8+ for direct local development
+- Docker Desktop for the recommended local and AWS workflow
+- Terraform and AWS CLI for AWS deployment
 
-## Project commands
+Run all local commands from Windows PowerShell. The complete AWS procedure is in [DEPLOY_AWS.md](DEPLOY_AWS.md).
 
-Run these commands from the repository root unless a command says otherwise. In Windows PowerShell, use `npm.cmd`; it works even when PowerShell blocks `npm.ps1`.
+## Local development
 
-| Command | What it does |
-| --- | --- |
-| `npm.cmd install` | Installs root development dependencies. |
-| `npm.cmd run install:all` | Installs API and client dependencies. |
-| `npm.cmd run dev` | Runs Express and Vite together for development. |
-| `npm.cmd run build` | Builds the React client for production. |
-| `npm.cmd start` | Starts the production Express server. |
-| `npm.cmd run seed --prefix server` | Creates the demo users and complaints. |
-| `npm.cmd run dev --prefix server` | Runs only the API with nodemon. |
-| `npm.cmd run dev --prefix client` | Runs only the Vite client. |
-| `npm.cmd run preview --prefix client` | Previews a built Vite client. |
-
-## Fastest local setup: Docker Desktop
-
-1. Install and start Docker Desktop.
-2. Open PowerShell in this project and run:
+Start local MongoDB, then run:
 
 ```powershell
 Set-Location "D:\Downloads\Student Complaint Management System"
-docker --version
-docker compose version
+Copy-Item .env.example .env
+(Get-Content .env) -replace '^NODE_ENV=.*', 'NODE_ENV=development' | Set-Content .env
+(Get-Content .env) -replace '^SEED_DEMO_DATA=.*', 'SEED_DEMO_DATA=true' | Set-Content .env
+npm.cmd install
+npm.cmd run install:all
+npm.cmd run dev
+```
+
+The frontend is available at `http://localhost:5173`; only during development, Vite proxies `/api` to Express at `http://localhost:5000`.
+
+## Local production-style Docker run
+
+Compose exposes only the application on port 80. MongoDB remains private on the Compose network and persists in the named `mongo_data` volume.
+
+```powershell
+Set-Location "D:\Downloads\Student Complaint Management System"
 Copy-Item .env.example .env
 $bytes = New-Object byte[] 48
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
 $secret = [Convert]::ToBase64String($bytes)
-(Get-Content .env) -replace '^JWT_SECRET=.*', "JWT_SECRET=$secret" | Set-Content .env
-notepad .env
+(Get-Content .env) `
+  -replace '^NODE_ENV=.*', 'NODE_ENV=production' `
+  -replace '^JWT_SECRET=.*', "JWT_SECRET=$secret" `
+  -replace '^SEED_DEMO_DATA=.*', 'SEED_DEMO_DATA=false' |
+  Set-Content .env
 docker compose config
 docker compose up --build -d
 docker compose ps
@@ -108,223 +106,31 @@ Invoke-RestMethod http://localhost/api/health
 Start-Process http://localhost
 ```
 
-For Docker, leave `DOCKER_MONGODB_URI=mongodb://mongo:27017/campuscare` in `.env`. The website is available at `http://localhost` and the health endpoint is `http://localhost/api/health`.
-
-### Docker lifecycle commands
-
-```powershell
-docker compose build
-docker compose up -d
-docker compose up --build -d
-docker compose ps
-docker compose logs -f
-docker compose logs -f app
-docker compose logs -f mongo
-docker compose restart
-docker compose restart app
-docker compose stop
-docker compose start
-docker compose exec app wget --spider http://localhost:5000/api/health
-docker compose exec mongo mongosh campuscare
-docker compose down
-docker compose down -v
-```
-
-`docker compose down` preserves the MongoDB volume. `docker compose down -v` permanently deletes the local database data and gives you a fresh demo database on the next start.
-
-## Local development without Docker
-
-Start your local MongoDB service before starting the app. Create a development `.env`, replacing the Compose MongoDB hostname with localhost:
-
-```powershell
-Set-Location "D:\Downloads\Student Complaint Management System"
-node --version
-Copy-Item .env.example .env
-(Get-Content .env) -replace '^MONGODB_URI=.*', 'MONGODB_URI=mongodb://127.0.0.1:27017/campuscare' | Set-Content .env
-(Get-Content .env) -replace '^SEED_DEMO_DATA=.*', 'SEED_DEMO_DATA=true' | Set-Content .env
-npm.cmd install
-npm.cmd run install:all
-npm.cmd run dev
-```
-
-This starts the client at `http://localhost:5173` and the API at `http://localhost:5000`. Check the API with:
-
-```powershell
-Invoke-RestMethod http://localhost:5000/api/health
-```
-
-Alternatively, run the API and client separately in two PowerShell windows:
-
-```powershell
-npm.cmd run dev --prefix server
-```
-
-```powershell
-npm.cmd run dev --prefix client
-```
-
-### Build and run production mode without Docker
-
-Use local MongoDB and a production `.env` file:
-
-```powershell
-npm.cmd run build
-$env:NODE_ENV = 'production'
-$env:PORT = '5000'
-npm.cmd start
-Invoke-RestMethod http://localhost:5000/api/health
-Start-Process http://localhost:5000
-```
-
-## Demo accounts
-
-With `SEED_DEMO_DATA=true`, use:
-
-| Role | Username | Password |
-| --- | --- | --- |
-| Student | `student` | `student123` |
-| Administrator | `pccoe` | `123456789` |
-
-The administrator account is always created or repaired when the API starts. The admin portal accepts only username `pccoe` with password `123456789`; that username cannot be registered or used through the student portal. Passwords are stored in MongoDB as bcrypt hashes.
-
-### MongoDB Compass
-
-For a local MongoDB installation, connect Compass with:
-
-```text
-mongodb://127.0.0.1:27017
-```
-
-The application database is `campuscare`. Start the API with `MONGODB_URI=mongodb://127.0.0.1:27017/campuscare`; it will create the administrator record automatically. Set `SEED_DEMO_DATA=true` only if you also want the demo student and sample complaints.
-
-You may seed manually after MongoDB is running:
-
-```powershell
-npm.cmd run seed --prefix server
-```
-
-Never enable demo data or use demo passwords in production.
-
-## Faculty demonstration workflow
-
-Start with `SEED_DEMO_DATA=true` so the two demo accounts are available.
-
-1. Sign in as **student** (`student` / `student123`).
-2. Select **Submit complaint** and complete the form.
-3. Submit it and show the generated **complaint reference ID** in the success banner.
-4. Open **My complaints** to show the new record and its initial **Pending** status.
-5. Click **Sign out**.
-6. Sign in as **admin** (`admin` / `admin123`).
-7. On **Overview**, show the Total, Pending, In progress, and Resolved dashboard statistics.
-8. Open **Manage complaints** and search for the complaint reference ID.
-9. Change its status using the status selector (for example, to **In Progress** or **Resolved**).
-10. Click **Sign out**.
-11. Sign in again as **student**.
-12. Open **My complaints** and show the updated complaint status.
-
-## AWS deployment
-
-Terraform provisions the EC2 instance; Ansible installs Docker and deploys this project to it.
-
-### 1. Configure AWS and provision EC2
-
-Create an EC2 key pair in AWS first, download its `.pem` file, and keep it outside the repository. Then run:
-
-```powershell
-aws --version
-aws configure
-Set-Location "D:\Downloads\Student Complaint Management System\terraform"
-terraform version
-terraform init
-terraform fmt -check -recursive
-terraform validate
-$myIp = (Invoke-RestMethod https://checkip.amazonaws.com).Trim()
-terraform plan -out tfplan -var "allowed_ssh_cidr=$myIp/32" -var "key_pair_name=campuscare-key"
-terraform apply tfplan
-terraform output
-terraform output -raw ec2_public_ip
-terraform output -raw ec2_public_dns
-```
-
-Replace `campuscare-key` with the actual AWS key-pair name if it differs. Terraform state contains infrastructure details; do not commit it.
-
-### 2. Configure Ansible and deploy
-
-Run these commands in Linux, macOS, or WSL. In `ansible/inventory.ini`, replace `YOUR_EC2_PUBLIC_IP` and set `ansible_ssh_private_key_file` to the absolute path of your `.pem` file. Create the root `.env` first and set a secure secret.
-
-```bash
-cd "/mnt/d/Downloads/Student Complaint Management System"
-cp .env.example .env
-sed -i 's/^NODE_ENV=.*/NODE_ENV=production/' .env
-sed -i 's/^SEED_DEMO_DATA=.*/SEED_DEMO_DATA=false/' .env
-sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 48)|" .env
-nano ansible/inventory.ini
-sudo apt update
-sudo apt install -y ansible
-ansible --version
-ansible-inventory -i ansible/inventory.ini --graph
-ansible-playbook -i ansible/inventory.ini ansible/deploy.yml --syntax-check
-ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
-curl http://YOUR_EC2_PUBLIC_IP/api/health
-```
-
-The playbook requires the root `.env`, copies the source, builds the Docker image, starts the stack, and waits for a successful health check.
-
-### 3. Update or troubleshoot the AWS deployment
-
-```bash
-cd "/mnt/d/Downloads/Student Complaint Management System"
-ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
-ssh -i /absolute/path/campuscare-key.pem ubuntu@YOUR_EC2_PUBLIC_IP
-sudo docker compose -f /opt/campuscare/compose.yml ps
-sudo docker compose -f /opt/campuscare/compose.yml logs -f app
-curl http://localhost/api/health
-exit
-```
-
-### 4. Destroy AWS resources
-
-Only run this if you intend to delete the provisioned EC2 instance and security group:
-
-```powershell
-Set-Location "D:\Downloads\Student Complaint Management System\terraform"
-$myIp = (Invoke-RestMethod https://checkip.amazonaws.com).Trim()
-terraform destroy -var "allowed_ssh_cidr=$myIp/32" -var "key_pair_name=campuscare-key"
-```
+Use `docker compose down` to stop the stack while retaining data. Use `docker compose down -v` only when deliberately deleting the database.
 
 ## Environment variables
 
-| Variable | Development value | Docker/production value |
-| --- | --- | --- |
-| `NODE_ENV` | `development` | `production` |
-| `PORT` | `5000` | `5000` |
-| `MONGODB_URI` | `mongodb://127.0.0.1:27017/campuscare` | Used by a directly started Node.js API; use an Atlas URI here when applicable |
-| `DOCKER_MONGODB_URI` | Not used | `mongodb://mongo:27017/campuscare`; set an Atlas URI here for Docker/EC2 production |
-| `JWT_SECRET` | A unique random string | A unique random secret kept private |
-| `CLIENT_URL` | `http://localhost:5173` | Public client URL, if hosted separately |
-| `SEED_DEMO_DATA` | `true` only for demos | `false` |
-| `APP_PORT` | Not used | `80` by default; change to another host port if required |
+| Variable | Purpose |
+| --- | --- |
+| `NODE_ENV` | `development` locally; `production` when deployed. |
+| `PORT` | Express container port, normally `5000`. |
+| `MONGODB_URI` | Direct local Node.js MongoDB URI. |
+| `DOCKER_MONGODB_URI` | Compose URI; keep `mongodb://mongo:27017/campuscare`. |
+| `JWT_SECRET` | Unique private token-signing secret; required in production. |
+| `CLIENT_URL` | Blank for same-origin deployment; only set for a separate CORS frontend. |
+| `SEED_DEMO_DATA` | `true` only for local demonstration data. |
+| `APP_PORT` | Application host port, default `80`. |
 
-## Common checks
+Never commit `.env`, PEM keys, Terraform state, or AWS credentials.
+
+## Validation
 
 ```powershell
+Set-Location "D:\Downloads\Student Complaint Management System"
 npm.cmd run build
+node --check server/src/config.js
 node --check server/src/server.js
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform validate
 docker compose config
-```
-
-If port 80 is already busy, set `APP_PORT=8080` in `.env`, rerun `docker compose up -d`, and open `http://localhost:8080`.
-
-
-run this commands
-
-powershell 1
-
-npm.cmd run dev --prefix server
-```
-
-```powershell 2
-npm.cmd run dev --prefix client
 ```

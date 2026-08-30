@@ -2,47 +2,141 @@
 - name: Deploy CampusCare MERN application
   hosts: campuscare
   become: true
+  gather_facts: true
   vars:
     app_remote_dir: /opt/campuscare
+    docker_apt_repository: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
   tasks:
-    - name: Install Docker Engine and Compose plugin
-      apt:
-        update_cache: true
-        name: [docker.io, docker-compose-v2]
+    - name: Install Docker repository prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, curl]
         state: present
-    - name: Enable Docker
-      systemd:
+        update_cache: true
+
+    - name: Create the Docker APT keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install the Docker repository signing key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Configure the official Docker APT repository
+      ansible.builtin.apt_repository:
+        repo: "{{ docker_apt_repository }}"
+        filename: docker
+        state: present
+
+    - name: Install Docker Engine and Docker Compose plugin
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
         name: docker
         enabled: true
         state: started
-    - name: Create application directory
-      file:
-        path: "{{ app_remote_dir }}"
+
+    - name: Allow the Ubuntu user to use Docker without sudo after re-login
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    - name: Create deployment directories
+      ansible.builtin.file:
+        path: "{{ app_remote_dir }}/{{ item }}"
         state: directory
         mode: "0755"
-    - name: Check that the production environment file exists
-      stat:
+      loop: ["", client, client/src, client/public, server, server/src]
+
+    - name: Copy deployment root files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../{{ item }}"
+        dest: "{{ app_remote_dir }}/{{ item }}"
+        mode: "0644"
+      loop: [Dockerfile, compose.yml, .dockerignore, package.json, package-lock.json, client/index.html, client/package.json, client/package-lock.json, client/vite.config.js, server/package.json, server/package-lock.json]
+
+    - name: Copy frontend source without Windows dependencies or generated output
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../client/{{ item }}/"
+        dest: "{{ app_remote_dir }}/client/{{ item }}/"
+      loop: [src, public]
+
+    - name: Copy backend source without Windows dependencies
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../server/src/"
+        dest: "{{ app_remote_dir }}/server/src/"
+
+    - name: Check that the local production environment file exists
+      ansible.builtin.stat:
         path: "{{ playbook_dir }}/../.env"
       delegate_to: localhost
       become: false
       register: environment_file
+
     - name: Require a production environment file
-      assert:
+      ansible.builtin.assert:
         that: environment_file.stat.exists
         fail_msg: "Create .env from .env.example and set a secure JWT_SECRET before deploying."
-    - name: Copy deployment source
-      copy:
-        src: "../"
-        dest: "{{ app_remote_dir }}/"
-    - name: Start the application stack
-      command: docker compose -f compose.yml up -d --build
-      args:
+
+    - name: Read production environment settings without logging them
+      ansible.builtin.set_fact:
+        deployment_environment: "{{ lookup('ansible.builtin.file', playbook_dir + '/../.env') }}"
+      no_log: true
+
+    - name: Validate production environment settings
+      ansible.builtin.assert:
+        that:
+          - "'NODE_ENV=production' in deployment_environment"
+          - "'SEED_DEMO_DATA=false' in deployment_environment"
+          - "'JWT_SECRET=replace-with-a-long-random-secret' not in deployment_environment"
+        fail_msg: "Set NODE_ENV=production, SEED_DEMO_DATA=false, and a unique JWT_SECRET in .env before deploying."
+      no_log: true
+
+    - name: Copy production environment file with restricted permissions
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../.env"
+        dest: "{{ app_remote_dir }}/.env"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Build the CampusCare application image
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml build
         chdir: "{{ app_remote_dir }}"
-    - name: Verify API health
-      uri:
-        url: http://localhost/api/health
+
+    - name: Start the CampusCare stack
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml up -d
+        chdir: "{{ app_remote_dir }}"
+
+    - name: Verify that both Compose services are running
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml ps --status running
+        chdir: "{{ app_remote_dir }}"
+      changed_when: false
+      register: compose_services
+      failed_when: "'app' not in compose_services.stdout or 'mongo' not in compose_services.stdout"
+
+    - name: Wait for the application health endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1/api/health
         status_code: 200
+        return_content: true
       register: health
-      retries: 12
+      retries: 18
       delay: 5
       until: health.status == 200
+
+    - name: Report deployment URL
+      ansible.builtin.debug:
+        msg: "CampusCare is healthy at http://{{ ansible_host }}/"

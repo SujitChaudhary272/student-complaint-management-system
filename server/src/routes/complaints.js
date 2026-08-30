@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Router } from "express";
 import Complaint, { categories } from "../models/Complaint.js";
 import { authenticate, authorize } from "../middleware/auth.js";
@@ -11,7 +12,9 @@ router.get("/meta", (_req, res) => res.json({ categories, statuses, priorities }
 
 router.get("/stats", async (req, res, next) => {
   try {
-    const filter = req.user.role === "student" ? { student: req.user.id } : {};
+    const filter = req.user.role === "student"
+      ? { student: new mongoose.Types.ObjectId(req.user.id) }
+      : {};
     const rows = await Complaint.aggregate([{ $match: filter }, { $group: { _id: "$status", count: { $sum: 1 } } }]);
     const stats = { total: 0, pending: 0, inProgress: 0, resolved: 0 };
     rows.forEach(({ _id, count }) => { stats.total += count; if (_id === "Pending") stats.pending = count; if (_id === "In Progress") stats.inProgress = count; if (_id === "Resolved") stats.resolved = count; });
