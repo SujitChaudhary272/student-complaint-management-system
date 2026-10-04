@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-dashboards, namespace: campuscare, labels: { grafana_dashboard: "1" } }
+data:
+  campuscare.json: |
+    {"title":"CampusCare Application","schemaVersion":39,"version":1,"panels":[{"type":"stat","title":"HTTP responses","targets":[{"expr":"sum(campuscare_http_requests_total)"}]},{"type":"stat","title":"MongoDB connected","targets":[{"expr":"max(campuscare_mongodb_connected)"}]},{"type":"timeseries","title":"Request rate","targets":[{"expr":"sum(rate(campuscare_http_requests_total[5m]))"}]}]}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-provisioning, namespace: campuscare }
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: CampusCare
+        type: file
+        options: { path: /var/lib/grafana/dashboards }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: grafana, namespace: campuscare }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata: { labels: { app: grafana } }
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.4.0
+          ports: [{ containerPort: 3000 }]
+          volumeMounts:
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasource.yml, subPath: datasource.yml }
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml, subPath: dashboards.yml }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards }
+      volumes:
+        - name: provisioning
+          configMap: { name: grafana-provisioning }
+        - name: dashboards
+          configMap: { name: grafana-dashboards }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: grafana, namespace: campuscare }
+spec:
+  selector: { app: grafana }
+  ports: [{ port: 3000, targetPort: 3000 }]

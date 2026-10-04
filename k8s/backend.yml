@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campuscare-backend
+  namespace: campuscare
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: campuscare-backend }
+  template:
+    metadata:
+      labels: { app: campuscare-backend }
+    spec:
+      containers:
+        - name: backend
+          image: docker.io/REPLACE_WITH_DOCKERHUB_USERNAME/campuscare:latest
+          imagePullPolicy: Always
+          ports: [{ containerPort: 5000 }]
+          envFrom:
+            - configMapRef: { name: campuscare-config }
+            - secretRef: { name: campuscare-secrets }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: 5000 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campuscare-backend
+  namespace: campuscare
+  labels: { app: campuscare-backend }
+spec:
+  type: ClusterIP
+  selector: { app: campuscare-backend }
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000

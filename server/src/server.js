@@ -12,6 +12,11 @@ import complaintRoutes from "./routes/complaints.js";
 import { ensureAdminAccount, seedDemoData } from "./seed.js";
 
 const app = express();
+let requestsTotal = 0;
+app.use((req, res, next) => {
+  res.on("finish", () => { requestsTotal += 1; });
+  next();
+});
 app.use(helmet({ contentSecurityPolicy: false }));
 // The production frontend and API share one origin. CORS is only enabled when
 // a separate client URL is explicitly configured.
@@ -23,6 +28,22 @@ app.use("/api/complaints", complaintRoutes);
 app.get("/api/health", (_req, res) => {
   const connected = mongoose.connection.readyState === 1;
   res.status(connected ? 200 : 503).json({ status: connected ? "ok" : "unavailable", database: connected ? "connected" : "disconnected" });
+});
+// Intentionally dependency-free Prometheus text format; it exposes no user or
+// complaint data and is consumed by the cluster-local Prometheus Service.
+app.get("/metrics", (_req, res) => {
+  const connected = mongoose.connection.readyState === 1 ? 1 : 0;
+  res.type("text/plain; version=0.0.4; charset=utf-8").send([
+    "# HELP campuscare_http_requests_total Total HTTP responses served by this process.",
+    "# TYPE campuscare_http_requests_total counter",
+    `campuscare_http_requests_total ${requestsTotal}`,
+    "# HELP campuscare_mongodb_connected MongoDB connection state (1 = connected).",
+    "# TYPE campuscare_mongodb_connected gauge",
+    `campuscare_mongodb_connected ${connected}`,
+    "# HELP campuscare_process_uptime_seconds Node process uptime in seconds.",
+    "# TYPE campuscare_process_uptime_seconds gauge",
+    `campuscare_process_uptime_seconds ${process.uptime().toFixed(3)}`
+  ].join("\n") + "\n");
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -38,11 +59,17 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ message: "An unexpected error occurred." });
 });
 
-mongoose.connection.on("error", (error) => console.error("MongoDB connection error:", error.message));
-mongoose.connection.on("disconnected", () => console.warn("MongoDB disconnected."));
+export { app };
 
-mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 }).then(async () => {
+export async function startServer() {
+  mongoose.connection.on("error", (error) => console.error("MongoDB connection error:", error.message));
+  mongoose.connection.on("disconnected", () => console.warn("MongoDB disconnected."));
+  await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 });
   await ensureAdminAccount();
   if (process.env.SEED_DEMO_DATA === "true") await seedDemoData();
   app.listen(config.port, () => console.log(`CampusCare API listening on ${config.port}`));
-}).catch((error) => { console.error("MongoDB connection failed:", error); process.exit(1); });
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  startServer().catch((error) => { console.error("MongoDB connection failed:", error); process.exit(1); });
+}

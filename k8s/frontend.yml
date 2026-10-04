@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campuscare-frontend
+  namespace: campuscare
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: campuscare-frontend }
+  template:
+    metadata:
+      labels: { app: campuscare-frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: docker.io/REPLACE_WITH_DOCKERHUB_USERNAME/campuscare-frontend:latest
+          imagePullPolicy: Always
+          ports: [{ containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /, port: 8080 } }
+          livenessProbe: { httpGet: { path: /, port: 8080 }, initialDelaySeconds: 15 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campuscare-frontend
+  namespace: campuscare
+spec:
+  type: ClusterIP
+  selector: { app: campuscare-frontend }
+  ports: [{ port: 80, targetPort: 8080 }]

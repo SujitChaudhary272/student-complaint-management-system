@@ -1,0 +1,80 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: campuscare
+  FRONTEND_IMAGE_NAME: campuscare-frontend
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
+      - name: Build frontend
+        run: npm run build
+      - name: Test backend API
+        run: npm test
+      - name: Set image name
+        id: image
+        run: echo "image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push application images
+        if: github.event_name == 'push'
+        run: |
+          docker build -t "${{ steps.image.outputs.image }}" -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:latest" .
+          docker build -f k8s/frontend.Dockerfile -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}" -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:latest" .
+          docker push "${{ steps.image.outputs.image }}"
+          docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:latest"
+          docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"
+          docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:latest"
+
+  deploy-ec2:
+    needs: build-test-publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare deployment secrets
+        env:
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$DEPLOY_ENV_FILE" > .env
+          printf '%s' "$EC2_SSH_PRIVATE_KEY" > /tmp/campuscare-ec2.pem
+          chmod 600 /tmp/campuscare-ec2.pem
+      - name: Deploy pulled image through existing Ansible playbook
+        env:
+          REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          REGISTRY_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          docker build -t campuscare-ansible ./ansible
+          docker run --rm \
+            -e REGISTRY_USERNAME -e REGISTRY_TOKEN \
+            -v "$PWD:/workspace" -v /tmp/campuscare-ec2.pem:/tmp/student-complaint-key.pem:ro \
+            -w /workspace campuscare-ansible \
+            ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
+            --extra-vars "app_image=${{ needs.build-test-publish.outputs.image }} ansible_host=${{ secrets.EC2_HOST }}"
+      - name: Verify public health endpoint
+        run: curl --fail --retry 12 --retry-delay 5 "http://${{ secrets.EC2_HOST }}/api/health"

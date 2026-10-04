@@ -1,0 +1,8 @@
+{
+  "title": "CampusCare Application", "schemaVersion": 39, "version": 1,
+  "panels": [
+    {"type":"stat","title":"HTTP responses","targets":[{"expr":"sum(campuscare_http_requests_total)"}],"gridPos":{"h":8,"w":8,"x":0,"y":0}},
+    {"type":"stat","title":"MongoDB connected","targets":[{"expr":"max(campuscare_mongodb_connected)"}],"gridPos":{"h":8,"w":8,"x":8,"y":0}},
+    {"type":"timeseries","title":"Request rate","targets":[{"expr":"sum(rate(campuscare_http_requests_total[5m]))","legendFormat":"responses/s"}],"gridPos":{"h":8,"w":16,"x":0,"y":8}}
+  ]
+}

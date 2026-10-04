@@ -107,12 +107,6 @@ export default function AuthPage({ mode, onLogin, onBack }) {
           <button className="primary wide" disabled={busy}>
             {busy ? "Please wait..." : register ? "Create account" : "Sign in"}
           </button>
-          {admin && (
-            <div className="demo-note">
-              <strong>Admin access</strong>
-              <span>pccoe / 123456789</span>
-            </div>
-          )}
         </form>
       </section>
     </main>

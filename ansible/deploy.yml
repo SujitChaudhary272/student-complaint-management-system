@@ -113,11 +113,31 @@
       ansible.builtin.command:
         cmd: docker compose -f compose.yml build
         chdir: "{{ app_remote_dir }}"
+      when: app_image is not defined
+
+    - name: Authenticate to Docker Hub for the deployment image
+      ansible.builtin.shell:
+        cmd: "printf '%s' {{ registry_token | default(lookup('env', 'REGISTRY_TOKEN'), true) | quote }} | docker login --username {{ registry_username | default(lookup('env', 'REGISTRY_USERNAME'), true) | quote }} --password-stdin"
+      no_log: true
+      when:
+        - app_image is defined
+        - registry_username is defined or lookup('env', 'REGISTRY_USERNAME') | length > 0
+        - registry_token is defined or lookup('env', 'REGISTRY_TOKEN') | length > 0
+
+    - name: Pull the selected application image without touching MongoDB
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml pull app
+        chdir: "{{ app_remote_dir }}"
+      environment:
+        APP_IMAGE: "{{ app_image }}"
+      when: app_image is defined
 
     - name: Start the CampusCare stack
       ansible.builtin.command:
-        cmd: docker compose -f compose.yml up -d
+        cmd: docker compose -f compose.yml up -d --no-build
         chdir: "{{ app_remote_dir }}"
+      environment:
+        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
 
     - name: Verify that both Compose services are running
       ansible.builtin.command:
