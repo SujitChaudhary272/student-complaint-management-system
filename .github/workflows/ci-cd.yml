@@ -58,19 +58,41 @@ jobs:
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         run: |
           printf '%s' "$DEPLOY_ENV_FILE" > .env
-          printf '%s' "$EC2_SSH_PRIVATE_KEY" > /tmp/campuscare-ec2.pem
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          key = os.environ["EC2_SSH_PRIVATE_KEY"].replace("\r\n", "\n")
+          if "\\n" in key and "\n" not in key.strip():
+            key = key.replace("\\n", "\n")
+          if not key.endswith("\n"):
+            key += "\n"
+          Path("/tmp/campuscare-ec2.pem").write_text(key)
+          PY
           chmod 600 /tmp/campuscare-ec2.pem
       - name: Deploy pulled image through existing Ansible playbook
         env:
           REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           REGISTRY_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_USER: ${{ secrets.EC2_SSH_USER }}
         run: |
+          RESOLVED_SSH_USER="$EC2_SSH_USER"
+          if [ -z "$RESOLVED_SSH_USER" ]; then
+            for candidate in ubuntu ec2-user admin; do
+              if ssh -i /tmp/campuscare-ec2.pem -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$candidate@$EC2_HOST" "exit 0" >/dev/null 2>&1; then
+                RESOLVED_SSH_USER="$candidate"
+                break
+              fi
+            done
+          fi
+          : "${RESOLVED_SSH_USER:=ubuntu}"
           docker build -t campuscare-ansible ./ansible
           docker run --rm \
             -e REGISTRY_USERNAME -e REGISTRY_TOKEN \
             -v "$PWD:/workspace" -v /tmp/campuscare-ec2.pem:/tmp/student-complaint-key.pem:ro \
             -w /workspace campuscare-ansible \
             ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
-            --extra-vars "app_image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${{ github.sha }} ansible_host=${{ secrets.EC2_HOST }}"
+            --extra-vars "app_image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${{ github.sha }} ansible_host=${EC2_HOST} ansible_user=${RESOLVED_SSH_USER}"
       - name: Verify public health endpoint
         run: curl --fail --retry 12 --retry-delay 5 "http://${{ secrets.EC2_HOST }}/api/health"

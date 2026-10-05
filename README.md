@@ -322,6 +322,7 @@ In the GitHub repository, add these Actions secrets. `DEPLOY_ENV_FILE` is the co
 | `DOCKERHUB_TOKEN` | Docker Hub access token with push/pull permission |
 | `EC2_HOST` | EC2 public IP or DNS name |
 | `EC2_SSH_PRIVATE_KEY` | PEM contents used for the Ubuntu SSH login |
+| `EC2_SSH_USER` | Optional SSH user override (defaults to auto-detect, then `ubuntu`) |
 | `DEPLOY_ENV_FILE` | Production environment file contents |
 
 Push to `main` after adding those secrets:
