@@ -3,14 +3,23 @@
   hosts: campuscare
   become: true
   gather_facts: true
+
   vars:
     app_remote_dir: /opt/campuscare
-    docker_apt_repository: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
+    docker_apt_repository: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_facts.distribution_release }} stable"
 
   tasks:
+
+    # ------------------------------------------------------------
+    # Docker installation
+    # ------------------------------------------------------------
+
     - name: Install Docker repository prerequisites
       ansible.builtin.apt:
-        name: [ca-certificates, curl]
+        name:
+          - ca-certificates
+          - curl
         state: present
         update_cache: true
 
@@ -34,7 +43,12 @@
 
     - name: Install Docker Engine and Docker Compose plugin
       ansible.builtin.apt:
-        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
         state: present
         update_cache: true
 
@@ -50,30 +64,61 @@
         groups: docker
         append: true
 
+    # ------------------------------------------------------------
+    # Application directories
+    # ------------------------------------------------------------
+
     - name: Create deployment directories
       ansible.builtin.file:
         path: "{{ app_remote_dir }}/{{ item }}"
         state: directory
         mode: "0755"
-      loop: ["", client, client/src, client/public, server, server/src]
+      loop:
+        - ""
+        - client
+        - client/src
+        - client/public
+        - server
+        - server/src
+
+    # ------------------------------------------------------------
+    # Copy deployment files
+    # ------------------------------------------------------------
 
     - name: Copy deployment root files
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../{{ item }}"
         dest: "{{ app_remote_dir }}/{{ item }}"
         mode: "0644"
-      loop: [Dockerfile, compose.yml, .dockerignore, package.json, package-lock.json, client/index.html, client/package.json, client/package-lock.json, client/vite.config.js, server/package.json, server/package-lock.json]
+      loop:
+        - Dockerfile
+        - compose.yml
+        - .dockerignore
+        - package.json
+        - package-lock.json
+        - client/index.html
+        - client/package.json
+        - client/package-lock.json
+        - client/vite.config.js
+        - server/package.json
+        - server/package-lock.json
 
     - name: Copy frontend source without Windows dependencies or generated output
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../client/{{ item }}/"
         dest: "{{ app_remote_dir }}/client/{{ item }}/"
-      loop: [src, public]
+      loop:
+        - src
+        - public
 
     - name: Copy backend source without Windows dependencies
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../server/src/"
         dest: "{{ app_remote_dir }}/server/src/"
+
+    # ------------------------------------------------------------
+    # Production environment
+    # ------------------------------------------------------------
 
     - name: Check that the local production environment file exists
       ansible.builtin.stat:
@@ -84,7 +129,8 @@
 
     - name: Require a production environment file
       ansible.builtin.assert:
-        that: environment_file.stat.exists
+        that:
+          - environment_file.stat.exists
         fail_msg: "Create .env from .env.example and set a secure JWT_SECRET before deploying."
 
     - name: Read production environment settings without logging them
@@ -109,20 +155,39 @@
         group: root
         mode: "0600"
 
+    # ------------------------------------------------------------
+    # Local build fallback
+    # ------------------------------------------------------------
+
     - name: Build the CampusCare application image
       ansible.builtin.command:
         cmd: docker compose -f compose.yml build
         chdir: "{{ app_remote_dir }}"
+      environment:
+        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
       when: app_image is not defined
+
+    # ------------------------------------------------------------
+    # Docker Hub authentication
+    # ------------------------------------------------------------
 
     - name: Authenticate to Docker Hub for the deployment image
       ansible.builtin.shell:
-        cmd: "printf '%s' {{ registry_token | default(lookup('env', 'REGISTRY_TOKEN'), true) | quote }} | docker login --username {{ registry_username | default(lookup('env', 'REGISTRY_USERNAME'), true) | quote }} --password-stdin"
+        cmd: >-
+          printf '%s' {{ registry_token | default(lookup('env', 'REGISTRY_TOKEN'), true) | quote }}
+          |
+          docker login
+          --username {{ registry_username | default(lookup('env', 'REGISTRY_USERNAME'), true) | quote }}
+          --password-stdin
       no_log: true
       when:
         - app_image is defined
         - registry_username is defined or lookup('env', 'REGISTRY_USERNAME') | length > 0
         - registry_token is defined or lookup('env', 'REGISTRY_TOKEN') | length > 0
+
+    # ------------------------------------------------------------
+    # Pull image from Docker Hub
+    # ------------------------------------------------------------
 
     - name: Pull the selected application image without touching MongoDB
       ansible.builtin.command:
@@ -132,12 +197,20 @@
         APP_IMAGE: "{{ app_image }}"
       when: app_image is defined
 
+    # ------------------------------------------------------------
+    # Start application
+    # ------------------------------------------------------------
+
     - name: Start the CampusCare stack
       ansible.builtin.command:
-        cmd: docker compose -f compose.yml up -d --no-build
+        cmd: docker compose -f compose.yml up -d --no-build --remove-orphans
         chdir: "{{ app_remote_dir }}"
       environment:
         APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
+
+    # ------------------------------------------------------------
+    # Verify containers
+    # ------------------------------------------------------------
 
     - name: Verify that both Compose services are running
       ansible.builtin.command:
@@ -145,7 +218,13 @@
         chdir: "{{ app_remote_dir }}"
       changed_when: false
       register: compose_services
-      failed_when: "'app' not in compose_services.stdout or 'mongo' not in compose_services.stdout"
+      failed_when: >
+        'app' not in compose_services.stdout
+        or 'mongo' not in compose_services.stdout
+
+    # ------------------------------------------------------------
+    # Health check
+    # ------------------------------------------------------------
 
     - name: Wait for the application health endpoint
       ansible.builtin.uri:
@@ -156,6 +235,10 @@
       retries: 18
       delay: 5
       until: health.status == 200
+
+    # ------------------------------------------------------------
+    # Deployment result
+    # ------------------------------------------------------------
 
     - name: Report deployment URL
       ansible.builtin.debug:
