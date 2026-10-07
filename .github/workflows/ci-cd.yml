@@ -46,12 +46,14 @@ jobs:
           docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"
           docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:latest"
 
-  deploy-ec2:
+    deploy-ec2:
     needs: build-test-publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Prepare deployment secrets
         env:
           DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
@@ -60,17 +62,34 @@ jobs:
           printf '%s' "$DEPLOY_ENV_FILE" > .env
           printf '%s' "$EC2_SSH_PRIVATE_KEY" > /tmp/campuscare-ec2.pem
           chmod 600 /tmp/campuscare-ec2.pem
+
+      - name: Test SSH connection to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+            -i /tmp/campuscare-ec2.pem \
+            ubuntu@"$EC2_HOST" \
+            "echo SSH connection successful"
+
       - name: Deploy pulled image through existing Ansible playbook
         env:
           REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           REGISTRY_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           docker build -t campuscare-ansible ./ansible
+
           docker run --rm \
-            -e REGISTRY_USERNAME -e REGISTRY_TOKEN \
-            -v "$PWD:/workspace" -v /tmp/campuscare-ec2.pem:/tmp/student-complaint-key.pem:ro \
-            -w /workspace campuscare-ansible \
+            -e REGISTRY_USERNAME \
+            -e REGISTRY_TOKEN \
+            -v "$PWD:/workspace" \
+            -v /tmp/campuscare-ec2.pem:/tmp/student-complaint-key.pem:ro \
+            -w /workspace \
+            campuscare-ansible \
             ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
-            --extra-vars "app_image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${{ github.sha }} ansible_host=${{ secrets.EC2_HOST }}"
+            --extra-vars "app_image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${{ github.sha }} ansible_host=${{ secrets.EC2_HOST }} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/student-complaint-key.pem"
+
       - name: Verify public health endpoint
-        run: curl --fail --retry 12 --retry-delay 5 "http://${{ secrets.EC2_HOST }}/api/health"
+        run: |
+          curl --fail --retry 12 --retry-delay 5 \
+            "http://${{ secrets.EC2_HOST }}/api/health"
