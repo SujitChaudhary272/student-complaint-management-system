@@ -189,12 +189,14 @@
     # Pull image from Docker Hub
     # ------------------------------------------------------------
 
-    - name: Pull the selected application image without touching MongoDB
+    - name: Pull the selected application image
       ansible.builtin.command:
-        cmd: docker compose -f compose.yml pull app
-        chdir: "{{ app_remote_dir }}"
-      environment:
-        APP_IMAGE: "{{ app_image }}"
+        cmd: docker image pull {{ app_image }}
+      when: app_image is defined
+
+    - name: Tag the selected application image for Compose default resolution
+      ansible.builtin.command:
+        cmd: docker image tag {{ app_image }} campuscare:local
       when: app_image is defined
 
     # ------------------------------------------------------------
