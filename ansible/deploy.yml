@@ -12,6 +12,18 @@
   tasks:
 
     # ------------------------------------------------------------
+    # Validate deployment image before making changes
+    # ------------------------------------------------------------
+
+    - name: Validate the deployment application image
+      ansible.builtin.assert:
+        that:
+          - app_image is defined
+          - app_image | default('') | trim | length > 0
+          - app_image is match('^docker\.io/[^/\s]+/campuscare:[0-9a-fA-F]+$')
+        fail_msg: "A valid image such as docker.io/USERNAME/campuscare:GITHUB_SHA must be passed to Ansible."
+
+    # ------------------------------------------------------------
     # Docker installation
     # ------------------------------------------------------------
 
@@ -156,20 +168,15 @@
         mode: "0600"
 
     # ------------------------------------------------------------
-    # Local build fallback
-    # ------------------------------------------------------------
-
-    - name: Build the CampusCare application image
-      ansible.builtin.command:
-        cmd: docker compose -f compose.yml build
-        chdir: "{{ app_remote_dir }}"
-      environment:
-        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
-      when: app_image is not defined
-
-    # ------------------------------------------------------------
     # Docker Hub authentication
     # ------------------------------------------------------------
+
+    - name: Require Docker Hub credentials
+      ansible.builtin.assert:
+        that:
+          - registry_username is defined or lookup('env', 'REGISTRY_USERNAME') | length > 0
+          - registry_token is defined or lookup('env', 'REGISTRY_TOKEN') | length > 0
+        fail_msg: "Docker Hub credentials were not supplied to the deployment."
 
     - name: Authenticate to Docker Hub for the deployment image
       ansible.builtin.shell:
@@ -180,10 +187,35 @@
           --username {{ registry_username | default(lookup('env', 'REGISTRY_USERNAME'), true) | quote }}
           --password-stdin
       no_log: true
-      when:
-        - app_image is defined
-        - registry_username is defined or lookup('env', 'REGISTRY_USERNAME') | length > 0
-        - registry_token is defined or lookup('env', 'REGISTRY_TOKEN') | length > 0
+
+    # ------------------------------------------------------------
+    # Resolve and validate Compose image
+    # ------------------------------------------------------------
+
+    - name: Resolve Compose images using the requested deployment image
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml config --images
+        chdir: "{{ app_remote_dir }}"
+      environment:
+        APP_IMAGE: "{{ app_image }}"
+      register: resolved_compose_images
+      changed_when: false
+
+    - name: Ensure Compose resolved the requested application image
+      ansible.builtin.assert:
+        that:
+          - app_image in resolved_compose_images.stdout_lines
+          - "'campuscare:local' not in resolved_compose_images.stdout_lines"
+        fail_msg: >-
+          Docker Compose did not resolve the requested image.
+          Expected {{ app_image }}.
+          Resolved images: {{ resolved_compose_images.stdout_lines }}.
+          Check compose.yml and the APP_IMAGE environment variable.
+        success_msg: "Docker Compose resolved the expected application image."
+
+    - name: Display the selected application image
+      ansible.builtin.debug:
+        msg: "Selected deployment image: {{ app_image }}"
 
     # ------------------------------------------------------------
     # Pull image from Docker Hub
@@ -195,19 +227,6 @@
         chdir: "{{ app_remote_dir }}"
       environment:
         APP_IMAGE: "{{ app_image }}"
-      when: app_image is defined
-
-    - name: Verify the resolved Compose images
-      ansible.builtin.command:
-        cmd: docker compose -f compose.yml config --images
-        chdir: "{{ app_remote_dir }}"
-      environment:
-        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
-      register: resolved_compose_images
-      changed_when: false
-      failed_when: >
-        app_image is defined
-        and app_image not in resolved_compose_images.stdout_lines
 
     # ------------------------------------------------------------
     # Start application
@@ -218,7 +237,7 @@
         cmd: docker compose -f compose.yml up -d --no-build --remove-orphans
         chdir: "{{ app_remote_dir }}"
       environment:
-        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
+        APP_IMAGE: "{{ app_image }}"
 
     # ------------------------------------------------------------
     # Verify containers
