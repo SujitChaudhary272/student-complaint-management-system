@@ -17,4 +17,5 @@ COPY server ./server
 COPY --from=client-build /app/client/dist ./client/dist
 USER node
 EXPOSE 5000
+EXPOSE 9464
 CMD ["node", "server/src/server.js"]

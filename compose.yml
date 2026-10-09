@@ -6,6 +6,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
+      METRICS_PORT: 9464
       MONGODB_URI: ${DOCKER_MONGODB_URI:-mongodb://mongo:27017/campuscare}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       CLIENT_URL: ${CLIENT_URL:-}
@@ -13,6 +14,12 @@ services:
 
     ports:
       - "${APP_PORT:-80}:5000"
+      # Keep metrics on localhost unless the EC2 security group restricts
+      # access to the monitoring security group.
+      - "${METRICS_BIND_ADDRESS:-0.0.0.0}:9464:9464"
+
+    expose:
+      - "9464"
 
     depends_on:
       mongo:

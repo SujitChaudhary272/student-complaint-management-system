@@ -10,13 +10,10 @@ import { config } from "./config.js";
 import authRoutes from "./routes/auth.js";
 import complaintRoutes from "./routes/complaints.js";
 import { ensureAdminAccount, seedDemoData } from "./seed.js";
+import { applicationUp, createMetricsServer, metricsMiddleware } from "./metrics.js";
 
 const app = express();
-let requestsTotal = 0;
-app.use((req, res, next) => {
-  res.on("finish", () => { requestsTotal += 1; });
-  next();
-});
+app.use(metricsMiddleware);
 app.use(helmet({ contentSecurityPolicy: false }));
 // The production frontend and API share one origin. CORS is only enabled when
 // a separate client URL is explicitly configured.
@@ -29,22 +26,7 @@ app.get("/api/health", (_req, res) => {
   const connected = mongoose.connection.readyState === 1;
   res.status(connected ? 200 : 503).json({ status: connected ? "ok" : "unavailable", database: connected ? "connected" : "disconnected" });
 });
-// Intentionally dependency-free Prometheus text format; it exposes no user or
-// complaint data and is consumed by the cluster-local Prometheus Service.
-app.get("/metrics", (_req, res) => {
-  const connected = mongoose.connection.readyState === 1 ? 1 : 0;
-  res.type("text/plain; version=0.0.4; charset=utf-8").send([
-    "# HELP campuscare_http_requests_total Total HTTP responses served by this process.",
-    "# TYPE campuscare_http_requests_total counter",
-    `campuscare_http_requests_total ${requestsTotal}`,
-    "# HELP campuscare_mongodb_connected MongoDB connection state (1 = connected).",
-    "# TYPE campuscare_mongodb_connected gauge",
-    `campuscare_mongodb_connected ${connected}`,
-    "# HELP campuscare_process_uptime_seconds Node process uptime in seconds.",
-    "# TYPE campuscare_process_uptime_seconds gauge",
-    `campuscare_process_uptime_seconds ${process.uptime().toFixed(3)}`
-  ].join("\n") + "\n");
-});
+app.all("/metrics", (_req, res) => res.sendStatus(404));
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(here, "../../client/dist");
@@ -68,6 +50,9 @@ export async function startServer() {
   await ensureAdminAccount();
   if (process.env.SEED_DEMO_DATA === "true") await seedDemoData();
   app.listen(config.port, () => console.log(`CampusCare API listening on ${config.port}`));
+  await createMetricsServer({ host: config.metricsHost, port: config.metricsPort });
+  applicationUp.set(1);
+  console.log(`CampusCare metrics listening on ${config.metricsHost}:${config.metricsPort}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

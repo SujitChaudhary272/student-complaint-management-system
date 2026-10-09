@@ -232,6 +232,9 @@ docker compose down
 | `CLIENT_URL` | Optional CORS URL for separate frontend deployment |
 | `SEED_DEMO_DATA` | Enables demo data only for development |
 | `APP_PORT` | Public application port in container deployment |
+| `METRICS_PORT` | Internal Prometheus metrics listener port, default `9464` |
+| `METRICS_HOST` | Metrics listener bind address, default `0.0.0.0` inside the container |
+| `METRICS_BIND_ADDRESS` | Optional Compose host bind address for port `9464`, default `127.0.0.1` |
 
 Important: Never store real credentials or secret values in the repository. Keep `.env` and deployment secrets private.
 
@@ -310,7 +313,7 @@ Kubernetes option: Ingress -> frontend + backend Services -> MongoDB PVC
 
 Pipeline stages are **Source → Build → Test → Containerization → Deployment → Monitoring**. A deployment job depends on the successful build/test job, so a failed test cannot deploy. Pull requests run installation, build, and tests only; pushes to `main` additionally publish images and update EC2.
 
-Tools: GitHub Actions, Docker/Docker Hub, Docker Compose, Terraform, Ansible, Kubernetes, Prometheus, and Grafana. The backend exposes `/api/health` (database-aware) and Prometheus-compatible `/metrics`.
+Tools: GitHub Actions, Docker/Docker Hub, Docker Compose, Terraform, Ansible, Kubernetes, Prometheus, and Grafana. The backend exposes `/api/health` (database-aware) and Prometheus-compatible `/metrics` on its separate metrics listener.
 
 ### GitHub Actions and Docker Hub setup
 
@@ -346,7 +349,7 @@ npm test
 docker compose config
 docker compose up --build -d
 Invoke-RestMethod http://localhost/api/health
-Invoke-WebRequest http://localhost/metrics | Select-Object -Expand Content
+Invoke-WebRequest http://localhost:9464/metrics | Select-Object -Expand Content
 docker compose down  # preserves mongo_data
 ```
 
@@ -386,3 +389,18 @@ kubectl -n campuscare port-forward service/grafana 3000:3000
 ```
 
 Open `http://localhost:9090/targets` to verify the backend scrape. Open `http://localhost:3000` (Grafana’s initial default login is `admin` / `admin`, then change it immediately) to view the provisioned CampusCare dashboard. The dashboard covers request volume/rate and database connectivity; Kubernetes platform metrics can be added later with node-exporter and kube-state-metrics.
+
+The backend exposes Prometheus metrics only on its separate listener at `http://localhost:9464/metrics` when that listener is reachable. The public application listener on port `5000` deliberately returns `404` for `/metrics`. Docker Compose keeps the host bind for port `9464` on `127.0.0.1` by default; for a private monitoring server, set `METRICS_BIND_ADDRESS=0.0.0.0` in the EC2 deployment environment and allow TCP `9464` only from the monitoring security group. The `campuscare_application_up` gauge becomes `1` only after MongoDB initialization and both listeners are ready.
+
+Prometheus also evaluates the following CampusCare alerts:
+
+- `CampusCareBackendDown`: the backend scrape is unavailable for five minutes.
+- `CampusCareMongoDBDisconnected`: the backend reports a lost MongoDB connection for five minutes.
+- `CampusCareScrapeMissing`: the backend target is absent for ten minutes.
+
+These alerts appear in Prometheus under `http://localhost:9090/alerts`. For production notifications, configure Alertmanager and route the `severity` labels to the team's chosen notification channel. Until notification routing is configured, use this response procedure:
+
+1. **Detect:** Confirm the alert and inspect `/targets`, Grafana, and `kubectl -n campuscare get pods,svc`.
+2. **Investigate:** Check `kubectl -n campuscare describe pod` and `kubectl -n campuscare logs deployment/campuscare-backend`; verify MongoDB pod health and recent deployment changes.
+3. **Recover:** Restore the failed backend deployment or dependency, then run `kubectl -n campuscare rollout status deployment/campuscare-backend` and verify `/api/health`.
+4. **Improve:** Record the incident, identify the trigger, and update the alert threshold, dashboard, or runbook after review.
