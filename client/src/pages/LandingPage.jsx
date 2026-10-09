@@ -60,6 +60,7 @@ export default function LandingPage({ onChoose }) {
           </button>
         </div>
       </section>
+      <footer className="landing-footer">Developed by PCCOE team</footer>
     </main>
   );
 }
