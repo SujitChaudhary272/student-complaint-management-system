@@ -10,12 +10,14 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: campuscare
   FRONTEND_IMAGE_NAME: campuscare-frontend
 
 jobs:
   build-test-publish:
     runs-on: ubuntu-latest
+    env:
+      APPLICATION_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/campuscare:${{ github.sha }}
+      APPLICATION_IMAGE_LATEST: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/campuscare:latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,10 +41,10 @@ jobs:
       - name: Build and push application images
         if: github.event_name == 'push'
         run: |
-          docker build -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${GITHUB_SHA}" -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:latest" .
+          docker build -t "$APPLICATION_IMAGE" -t "$APPLICATION_IMAGE_LATEST" .
           docker build -f k8s/frontend.Dockerfile -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}" -t "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:latest" .
-          docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${GITHUB_SHA}"
-          docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:latest"
+          docker push "$APPLICATION_IMAGE"
+          docker push "$APPLICATION_IMAGE_LATEST"
           docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"
           docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${FRONTEND_IMAGE_NAME}:latest"
 
@@ -50,6 +52,8 @@ jobs:
     needs: build-test-publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      APPLICATION_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/campuscare:${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +91,7 @@ jobs:
             -w /workspace \
             campuscare-ansible \
             ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
-            --extra-vars "app_image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${IMAGE_NAME}:${{ github.sha }} ansible_host=${{ secrets.EC2_HOST }} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/student-complaint-key.pem"
+            --extra-vars "app_image=$APPLICATION_IMAGE ansible_host=${{ secrets.EC2_HOST }} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/student-complaint-key.pem"
 
       - name: Verify public health endpoint
         run: |

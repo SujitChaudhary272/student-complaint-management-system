@@ -197,6 +197,18 @@
         APP_IMAGE: "{{ app_image }}"
       when: app_image is defined
 
+    - name: Verify the resolved Compose images
+      ansible.builtin.command:
+        cmd: docker compose -f compose.yml config --images
+        chdir: "{{ app_remote_dir }}"
+      environment:
+        APP_IMAGE: "{{ app_image | default('campuscare:local') }}"
+      register: resolved_compose_images
+      changed_when: false
+      failed_when: >
+        app_image is defined
+        and app_image not in resolved_compose_images.stdout_lines
+
     # ------------------------------------------------------------
     # Start application
     # ------------------------------------------------------------
