@@ -404,3 +404,126 @@ These alerts appear in Prometheus under `http://localhost:9090/alerts`. For prod
 2. **Investigate:** Check `kubectl -n campuscare describe pod` and `kubectl -n campuscare logs deployment/campuscare-backend`; verify MongoDB pod health and recent deployment changes.
 3. **Recover:** Restore the failed backend deployment or dependency, then run `kubectl -n campuscare rollout status deployment/campuscare-backend` and verify `/api/health`.
 4. **Improve:** Record the incident, identify the trigger, and update the alert threshold, dashboard, or runbook after review.
+
+
+REMOVED_DOCKER_TOKEN
+
+campuscare instace connect to vs
+ssh -i "C:\Users\ASUS\.ssh\student-complaint-key.pem" ubuntu@ec2-65-2-201-214.ap-south-1.compute.amazonaws.com
+
+
+monitoring instance connect to vs
+ssh -o IdentitiesOnly=yes -o ConnectTimeout=15 -i "D:\Downloads\mynewpair.pem" ubuntu@43.204.228.72
+
+
+
+
+To run Prometheus & Grafana
+
+ssh -o IdentitiesOnly=yes -i "D:\Downloads\mynewpair.pem" -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 ubuntu@43.204.228.72
+
+Grafana password
+Generate a strong password:
+
+admin
+
+5de24fa0383f411f35c7e6ffff0cfe99b7e36d4815ad191e
+
+
+
+browser for Grafana
+
+http://localhost:3000
+
+browser for Prometheus
+
+http://localhost:9090
+
+
+
+
+
+Queries for Graphana and Prometheus
+
+# ==========================================
+# PROMETHEUS MONITORING QUERIES
+# ==========================================
+
+# 1. Monitoring target health
+up
+
+# 2. CampusCare HTTP requests per second
+rate(campuscare_http_requests_total[5m])
+
+# 3. Total HTTP requests
+sum(campuscare_http_requests_total)
+
+# 4. HTTP 5xx errors per second
+sum(rate(campuscare_http_requests_total{status_code=~"5.."}[5m]))
+
+# 5. HTTP request rate by status code
+sum by (status_code) (rate(campuscare_http_requests_total[5m]))
+
+# 6. Average HTTP response time (seconds)
+sum(rate(campuscare_http_request_duration_seconds_sum[5m]))
+/
+sum(rate(campuscare_http_request_duration_seconds_count[5m]))
+
+# 7. 95th percentile HTTP response time (seconds)
+histogram_quantile(
+  0.95,
+  sum by (le) (
+    rate(campuscare_http_request_duration_seconds_bucket[5m])
+  )
+)
+
+# 8. Application health
+campuscare_application_up
+
+# 9. Server CPU utilization (%)
+100 * (
+  1 - avg by (instance) (
+    rate(node_cpu_seconds_total{mode="idle"}[5m])
+  )
+)
+
+# 10. Available server memory (bytes)
+node_memory_MemAvailable_bytes
+
+# 11. Total server memory (bytes)
+node_memory_MemTotal_bytes
+
+# 12. Memory usage (%)
+100 * (
+  1 - node_memory_MemAvailable_bytes
+  / node_memory_MemTotal_bytes
+)
+
+# 13. Server filesystem available space (bytes)
+node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+
+# 14. Network received bytes per second
+rate(node_network_receive_bytes_total{device!="lo"}[5m])
+
+# 15. Network transmitted bytes per second
+rate(node_network_transmit_bytes_total{device!="lo"}[5m])
+
+# 16. Server uptime (seconds)
+node_time_seconds - node_boot_time_seconds
+
+
+
+ Commands 
+
+docker ps
+docker compose ls
+sudo docker ps 
+curl -fsS http://localhost/api/health
+
+ssh -i "C:\Users\ASUS\.ssh\student-complaint-key.pem" ubuntu@ec2-65-2-201-214.ap-south-1.compute.amazonaws.com
+
+
+"C:\Users\ASUS\.ssh\student-complaint-key.pem"
+
+
+ssh -o IdentitiesOnly=yes -i "D:\Downloads\mynewpair.pem" -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 ubuntu@43.204.228.72

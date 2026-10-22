@@ -23,6 +23,8 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
+    rule_files:
+      - /etc/prometheus/rules/*.yml
     scrape_configs:
       - job_name: campuscare-backend
         metrics_path: /metrics
@@ -36,6 +38,39 @@ data:
           - source_labels: [__meta_kubernetes_endpoint_port_name]
             action: keep
             regex: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: prometheus-rules, namespace: campuscare }
+data:
+  campuscare-alerts.yml: |
+    groups:
+      - name: campuscare
+        rules:
+          - alert: CampusCareBackendDown
+            expr: up{job="campuscare-backend"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: CampusCare backend is unreachable
+              description: Prometheus has been unable to scrape the CampusCare backend for more than five minutes.
+          - alert: CampusCareMongoDBDisconnected
+            expr: campuscare_mongodb_connected{job="campuscare-backend"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: CampusCare cannot reach MongoDB
+              description: The CampusCare backend reports that its MongoDB connection has been unavailable for more than five minutes.
+          - alert: CampusCareScrapeMissing
+            expr: absent(up{job="campuscare-backend"})
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: CampusCare scrape target is missing
+              description: Prometheus cannot find a CampusCare backend target.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,10 +87,15 @@ spec:
           image: prom/prometheus:v3.0.1
           args: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus]
           ports: [{ containerPort: 9090 }]
-          volumeMounts: [{ name: config, mountPath: /etc/prometheus }, { name: storage, mountPath: /prometheus }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus/prometheus.yml, subPath: prometheus.yml }
+            - { name: rules, mountPath: /etc/prometheus/rules }
+            - { name: storage, mountPath: /prometheus }
       volumes:
         - name: config
-          configMap: { name: prometheus-config }
+          configMap: { name: prometheus-config, items: [{ key: prometheus.yml, path: prometheus.yml }] }
+        - name: rules
+          configMap: { name: prometheus-rules }
         - name: storage
           emptyDir: {}
 ---
