@@ -406,7 +406,7 @@ These alerts appear in Prometheus under `http://localhost:9090/alerts`. For prod
 4. **Improve:** Record the incident, identify the trigger, and update the alert threshold, dashboard, or runbook after review.
 
 
-REMOVED_DOCKER_TOKEN
+
 
 campuscare instace connect to vs
 ssh -i "C:\Users\ASUS\.ssh\student-complaint-key.pem" ubuntu@ec2-65-2-201-214.ap-south-1.compute.amazonaws.com
@@ -425,9 +425,7 @@ ssh -o IdentitiesOnly=yes -i "D:\Downloads\mynewpair.pem" -L 3000:127.0.0.1:3000
 Grafana password
 Generate a strong password:
 
-admin
 
-5de24fa0383f411f35c7e6ffff0cfe99b7e36d4815ad191e
 
 
 
