@@ -1,12 +1,17 @@
+// Import React hooks: useState stores changing UI values, and useMemo caches filtered results.
 import { useMemo, useState } from "react";
+// Import the project API helper used to send requests to the backend.
 import { api } from "../main";
+// Convert a date value into a readable format such as "26 Oct 2026".
 const date = (value) =>
   new Intl.DateTimeFormat("en", {
     day: "numeric",
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+// Convert status text into a CSS-friendly class name (for example, "In progress" -> "in-progress").
 const statusClass = (value) => value.toLowerCase().replace(/\s+/g, "-");
+// Display the CampusCare brand name and logo mark.
 function Brand() {
   return (
     <div className="brand">
@@ -17,10 +22,12 @@ function Brand() {
     </div>
   );
 }
+// Show the selected complaint in a modal. If no complaint is selected, render nothing.
 function Details({ item, close }) {
   if (!item) return null;
   return (
     <div className="modal-backdrop" onMouseDown={close}>
+      {/* Clicking the backdrop closes the modal. */}
       <section
         className="complaint-modal"
         role="dialog"
@@ -36,6 +43,7 @@ function Details({ item, close }) {
             ×
           </button>
         </div>
+        {/* Display the main complaint information in a grid. */}
         <div className="detail-grid">
           <div>
             <span>Student</span>
@@ -74,10 +82,13 @@ function Details({ item, close }) {
     </div>
   );
 }
+// Render the complaint table, filters, and role-specific actions.
 function Table({ rows, admin, meta, update, remove, open }) {
+  // Store the text search and selected category/status filters.
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("All");
+  // Filter complaints by search text, category, and status; recompute when inputs change.
   const filtered = useMemo(
     () =>
       rows.filter(
@@ -92,6 +103,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
   );
   return (
     <section className="complaint-card">
+      {/* Search box and category filter. */}
       <div className="table-toolbar">
         <div>
           <h2>Complaint register</h2>
@@ -114,6 +126,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
           </select>
         </div>
       </div>
+      {/* Quick buttons let the user filter complaints by status. */}
       <div className="quick-filters">
         <button
           className={status === "All" ? "active" : ""}
@@ -131,6 +144,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
           </button>
         ))}
       </div>
+      {/* Table shows complaint details and available actions for each row. */}
       <div className="table-scroll">
         <table>
           <thead>
@@ -145,6 +159,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
             </tr>
           </thead>
           <tbody>
+            {/* Create one table row for every complaint that matches the filters. */}
             {filtered.map((x) => (
               <tr key={x._id}>
                 <td>
@@ -152,6 +167,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
                 </td>
                 <td>{x.studentName}</td>
                 <td>
+                  {/* Admins can open complaint details; students see the title only. */}
                   {admin ? (
                     <button className="complaint-link" onClick={() => open(x)}>
                       <strong>{x.title}</strong>
@@ -170,6 +186,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
                   </span>
                 </td>
                 <td>
+                  {/* Admins can change status; students only see the current status. */}
                   {admin ? (
                     <select
                       className="status-select"
@@ -222,6 +239,7 @@ function Table({ rows, admin, meta, update, remove, open }) {
     </section>
   );
 }
+// Form used by students to submit a new campus complaint.
 function Form({ meta, submit }) {
   return (
     <section className="form-shell">
@@ -229,6 +247,7 @@ function Form({ meta, submit }) {
         <p className="eyebrow">NEW REQUEST</p>
         <h1>Tell us what needs attention.</h1>
       </div>
+      {/* The parent submit handler validates and sends this form to the backend. */}
       <form className="complaint-form" onSubmit={submit}>
         <label className="full">
           PRN number
@@ -276,6 +295,7 @@ function Form({ meta, submit }) {
     </section>
   );
 }
+// Main dashboard page shared by student and administrator accounts.
 export default function DashboardPage({
   user,
   complaints,
@@ -284,12 +304,15 @@ export default function DashboardPage({
   refresh,
   onLogout,
 }) {
+  // Determine which dashboard features are available for the current user.
   const admin = user.role === "admin";
   const [tab, setTab] = useState("dashboard");
   const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState(null);
+  // Update a complaint status through the API, refresh the list, and show feedback.
   const update = async (id, status) => {
     try {
+      // PATCH updates only the selected complaint status.
       await api(`/api/complaints/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
@@ -300,9 +323,11 @@ export default function DashboardPage({
       setNotice(e.message);
     }
   };
+  // Ask for confirmation, delete the complaint, then refresh the displayed data.
   const remove = async (item) => {
     if (!window.confirm(`Delete ${item.complaintCode}?`)) return;
     try {
+      // DELETE removes the selected complaint from the database.
       await api(`/api/complaints/${item._id}`, { method: "DELETE" });
       await refresh();
       setNotice("Complaint deleted.");
@@ -310,9 +335,11 @@ export default function DashboardPage({
       setNotice(e.message);
     }
   };
+  // Handle form submission and send the entered complaint details to the API.
   const create = async (e) => {
     e.preventDefault();
     try {
+      // POST creates a complaint using the values entered in the form.
       const item = await api("/api/complaints", {
         method: "POST",
         body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
@@ -324,6 +351,7 @@ export default function DashboardPage({
       setNotice(err.message);
     }
   };
+  // Build navigation items; only students get the "Submit complaint" option.
   const nav = [
     { id: "dashboard", label: "Overview" },
     ...(!admin ? [{ id: "new", label: "Submit complaint" }] : []),
@@ -331,9 +359,11 @@ export default function DashboardPage({
   ];
   return (
     <>
+      {/* Overall application layout: sidebar and main workspace. */}
       <div className="app-shell">
         <aside className="sidebar">
           <Brand />
+          {/* Switch between dashboard sections without reloading the page. */}
           <nav>
             {nav.map((x) => (
               <button
@@ -345,6 +375,7 @@ export default function DashboardPage({
               </button>
             ))}
           </nav>
+          {/* Show the signed-in user and the sign-out action. */}
           <div className="sidebar-footer">
             <span className="avatar">{user.fullName[0]}</span>
             <div>
@@ -373,12 +404,14 @@ export default function DashboardPage({
               </h1>
             </div>
           </header>
+          {/* Display a message or the selected page content. */}
           <div className="page-view" key={tab}>
             {notice && (
               <button className="alert notice" onClick={() => setNotice("")}>
                 {notice} ×
               </button>
             )}
+            {/* Dashboard overview with a summary and complaint statistics. */}
             {tab === "dashboard" && (
               <>
               <section className="hero">
@@ -420,7 +453,9 @@ export default function DashboardPage({
               </section>
               </>
             )}
+            {/* Show the complaint form when the student selects the new-request tab. */}
             {tab === "new" && <Form meta={meta} submit={create} />}
+            {/* Show the complaint register for students or administrators. */}
             {tab === "complaints" && (
               <Table
                 rows={complaints}
@@ -434,6 +469,7 @@ export default function DashboardPage({
           </div>
         </main>
       </div>
+      {/* The details modal is available to administrators when a complaint is selected. */}
       {admin && <Details item={selected} close={() => setSelected(null)} />}
     </>
   );

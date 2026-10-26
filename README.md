@@ -501,7 +501,7 @@ node_memory_MemTotal_bytes
 node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
 
 # 14. Network received bytes per second
-rate(node_network_receive_bytes_total{device!="lo"}[5m])
+rate(node_network_receive_bytes_total[5m])
 
 # 15. Network transmitted bytes per second
 rate(node_network_transmit_bytes_total{device!="lo"}[5m])
@@ -515,8 +515,8 @@ node_time_seconds - node_boot_time_seconds
 
 docker ps
 docker compose ls
-sudo docker ps 
 curl -fsS http://localhost/api/health
+docker stats
 
 ssh -i "C:\Users\ASUS\.ssh\student-complaint-key.pem" ubuntu@ec2-65-2-201-214.ap-south-1.compute.amazonaws.com
 
